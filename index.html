@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>BankShield — Security Observation</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif']}}}}</script>
+<style type="text/tailwindcss">
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}body{background:#f8fafc}
+.card{@apply bg-white border border-slate-200 rounded-xl p-4 shadow-sm}
+.btn1{@apply px-3 py-1.5 rounded-lg text-sm font-medium bg-[#0b1f44] text-white hover:bg-[#16306a] transition}
+.btn2{@apply px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 transition}
+th{@apply text-left text-xs uppercase tracking-wide text-slate-500 font-semibold py-2 px-2 border-b border-slate-200 cursor-pointer select-none whitespace-nowrap}
+td{@apply py-2 px-2 border-b border-slate-100 whitespace-nowrap}
+tbody tr{@apply cursor-pointer hover:bg-slate-50}
+.fl,.q{@apply border border-slate-300 rounded-lg px-2 py-1.5 text-sm bg-white}
+</style></head>
+<body class="font-sans text-slate-800 antialiased">
+<div id="ov" class="fixed inset-0 bg-slate-900/40 z-30 hidden"></div>
+<aside id="sb" class="fixed inset-y-0 left-0 w-64 bg-[#0b1f44] text-white z-40 -translate-x-full lg:translate-x-0 transition-transform duration-200 flex flex-col">
+ <div class="p-5 text-xl font-bold tracking-tight">🛡️ BankShield</div>
+ <nav class="px-3 space-y-1 text-sm" id="nav">
+  <button data-m="dash" class="w-full text-left px-3 py-2.5 rounded-lg">Dashboard</button>
+  <button data-m="rep" class="w-full text-left px-3 py-2.5 rounded-lg">Reports &amp; Analytics</button>
+  <button data-m="log" class="w-full text-left px-3 py-2.5 rounded-lg">Activity Log</button>
+ </nav>
+ <p class="mt-auto p-5 text-xs text-slate-300">Read-only observation mode. Records cannot be created, edited or deleted.</p>
+</aside>
+<div class="lg:ml-64">
+ <header class="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-slate-200 px-4 py-3 flex items-center gap-3">
+  <button id="hb" class="lg:hidden btn2">☰</button>
+  <h1 id="ttl" class="font-semibold text-lg flex-1"></h1>
+  <span class="text-xs px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Educational Demo — Fictional Banking Data</span>
+ </header>
+ <main class="p-4 lg:p-6">
+  <section id="m-dash" class="space-y-4">
+   <div id="cards" class="grid grid-cols-2 xl:grid-cols-4 gap-3"></div>
+   <div class="grid lg:grid-cols-3 gap-4">
+    <div class="card lg:col-span-2"><h3 class="font-semibold mb-2">Authentication trend (14 days)</h3><div class="relative h-60"><canvas id="c-trend"></canvas></div></div>
+    <div class="card"><h3 class="font-semibold mb-2">Critical &amp; high incident previews</h3><div id="prev" class="space-y-2"></div></div>
+   </div>
+   <div class="card"><h3 id="dt" class="font-semibold mb-3"></h3><div id="dtab"></div></div>
+  </section>
+  <section id="m-rep" class="space-y-4 hidden">
+   <div id="rtabs" class="flex flex-wrap gap-2"></div>
+   <div class="card">
+    <div class="flex flex-wrap items-center gap-2 mb-1"><h3 id="rtt" class="font-semibold"></h3>
+     <span class="flex-1"></span>
+     <select id="rg" class="fl"><option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30" selected>Last 30 days</option></select>
+     <select id="gb" class="fl"></select>
+     <select id="wk" class="fl"><option value="0">Daily</option><option value="1">Weekly</option></select></div>
+    <p id="rd" class="text-sm text-slate-500 mb-2"></p>
+    <div class="relative h-72"><canvas id="c-rep"></canvas></div>
+    <p class="text-xs text-slate-400 mt-1">Click a bar to inspect the underlying records.</p>
+    <div id="chip" class="mt-2"></div>
+   </div>
+   <div class="card"><div id="rt"></div></div>
+  </section>
+  <section id="m-log" class="space-y-4 hidden">
+   <div id="ltabs" class="flex flex-wrap gap-2"></div>
+   <div class="card"><div id="lt"></div></div>
+  </section>
+ </main>
+</div>
+<div id="md" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 p-4"><div class="bg-white rounded-xl max-w-md w-full max-h-[85vh] overflow-auto p-5 shadow-xl"><div class="flex justify-between items-center mb-2"><h3 id="mt" class="font-semibold"></h3><button id="mx" class="btn2">Close</button></div><div id="mb"></div></div></div>
+<script>
+// ---------- seeded mock data (one shared dataset) ----------
+let s=20261013;const R=()=>(s=(s*1664525+1013904223)>>>0)/4294967296;
+const pick=a=>a[Math.floor(R()*a.length)],ri=(a,b)=>a+Math.floor(R()*(b-a+1));
+const DAY=864e5,M0=Date.UTC(2026,9,13),END=M0+18*36e5,S0=M0-29*DAY;
+const ts=()=>S0+Math.floor(R()*(END-S0)),ip=()=>pick(['203.0.113.','198.51.100.','192.0.2.'])+ri(2,250);
+const day=t=>new Date(t).toISOString().slice(0,10),fmt=t=>new Date(t).toISOString().slice(0,16).replace('T',' ');
+const FN=['Amara','Liam','Sofia','Noah','Mei','Omar','Elena','Ravi','Zara','Mateo','Hana','Luca'],LN=['Reyes','Tanaka','Okafor','Silva','Novak','Haddad','Lindqvist','Cruz','Petrov','Nguyen','Moreau','Santos'];
+const fin=(a,p,n)=>a.sort((x,y)=>y.ts-x.ts).map((r,i)=>({id:p+(n+i),...r}));
+const D={};
+D.acc=Array.from({length:50},(_,i)=>({id:'ACC-'+(1001+i),holder:pick(FN)+' '+pick(LN),type:pick(['Checking','Savings','Business','Credit']),status:'Active'}));
+const A=Object.fromEntries(D.acc.map(a=>[a.id,a])),acct=()=>pick(D.acc).id;
+const DEV=['Chrome / Windows','Safari / iOS','Edge / Windows','Firefox / Linux','Mobile App / Android'];
+D.logins=fin(Array.from({length:100},()=>{const ok=R()>.4;return{ts:ts(),acct:acct(),ip:ip(),device:pick(DEV),result:ok?'Success':'Failed',reason:ok?'Valid credentials + MFA':pick(['Wrong password','MFA failed','Expired credentials','Unknown device','Geo-anomaly'])}}),'LGN-',5001);
+const F=D.logins.filter(l=>l.result==='Failed').map(x=>[R(),x]).sort((a,b)=>a[0]-b[0]).slice(0,20).map(x=>x[1]);
+D.lock=fin(F.map(l=>({ts:l.ts+ri(1,9)*6e4,acct:l.acct,ip:l.ip,reason:pick(['Repeated failed logins','Brute-force pattern','Credential stuffing detected','Suspicious location','Manual fraud hold']),attempts:ri(3,9),severity:pick(['Medium','High','High','Critical']),status:R()<.5?'Locked':'Released',source:l.id})),'LCK-',7001);
+D.lock.filter(l=>l.status==='Locked').forEach(l=>A[l.acct].status='Locked');
+D.unauth=fin(Array.from({length:30},()=>({ts:ts(),acct:acct(),ip:ip(),resource:pick(['Wire transfer approval','Customer PII export','Admin console','Loan portfolio','Treasury ledger','Card vault']),role:pick(['Teller','Analyst','External','Contractor']),severity:pick(['Low','Medium','High','Critical']),outcome:'Denied'})),'UAI-',3001);
+D.sess=Array.from({length:40},(_,i)=>{const st=i<14?'Active':i<30?'Expired':'Terminated';return{ts:st==='Active'?END-Math.floor(R()*DAY):ts(),acct:acct(),device:pick(DEV),ip:ip(),status:st,minutes:ri(4,95),note:st==='Active'?'In progress':st==='Expired'?'Idle timeout':'Ended by security policy'}});
+D.sess=fin(D.sess,'SES-',2001);
+D.alerts=fin(Array.from({length:25},(_,i)=>{const sv=['Critical','High','Medium','Low','Medium'][i%5];return{ts:ts(),acct:acct(),title:pick(['Impossible travel login','Credential stuffing burst','Privilege escalation attempt','Unusual wire request','Multiple failed MFA','After-hours admin access','Bulk export attempt','Dormant account reactivated']),severity:sv,status:sv==='Critical'?pick(['Open','Investigating']):pick(['Open','Investigating','Resolved']),detail:'Flagged by fictional rules engine; analyst review '+pick(['pending','in progress','complete'])+'.'}}),'ALT-',4001);
+D.mods=fin(Array.from({length:30},()=>{const t=pick(['Password Change','Permission Change','Profile Update','Limit Change','Contact Update']);return{ts:ts(),acct:acct(),type:t,actor:pick(['Self-service','Helpdesk','Branch Admin']),detail:t+' recorded',severity:t==='Permission Change'?'High':t==='Limit Change'?'Medium':'Low'}}),'MOD-',6001);
+{const E=[],ev=(r,cat,type,severity,detail,ref)=>E.push({ts:r.ts,cat,type,acct:r.acct,ip:r.ip||'—',severity,detail,ref});
+D.logins.forEach(l=>ev(l,'Authentication',l.result==='Success'?'Login Success':'Login Failed',l.result==='Success'?'Low':'Medium',l.reason,l.id));
+for(let i=0;i<80;i++)ev({ts:ts(),acct:acct(),ip:ip()},'Authentication','Logout','Low','User signed out','—');
+D.unauth.forEach(u=>ev(u,'Unauthorized Access','Access Denied',u.severity,u.role+' attempted: '+u.resource,u.id));
+D.mods.forEach(m=>ev(m,'Account Modification',m.type,m.severity,m.actor+' — '+m.detail,m.id));
+D.lock.forEach(l=>ev(l,'Security Incident','Account Lockout',l.severity,l.reason,l.id));
+D.alerts.forEach(a=>ev(a,'Security Incident','Security Alert',a.severity,a.title,a.id));
+for(let i=0;i<15;i++)ev({ts:ts(),acct:acct(),ip:ip()},'Security Incident','Suspicious Activity',pick(['Medium','High']),pick(['Rapid balance inquiries','Odd navigation pattern','Repeated profile lookups','Session from new ASN']),'—');
+D.events=E.sort((a,b)=>b.ts-a.ts).map((e,i)=>({id:'EVT-'+(9001+i),...e}));}
+// ---------- helpers ----------
+const $=q=>document.querySelector(q);
+const ok='bg-emerald-100 text-emerald-700',bad='bg-red-100 text-red-700',wn='bg-amber-100 text-amber-700',nu='bg-slate-100 text-slate-600';
+const BC={Critical:bad,High:'bg-orange-100 text-orange-700',Medium:wn,Low:nu,Success:ok,Resolved:ok,Released:ok,Active:ok,Failed:bad,Locked:bad,Terminated:bad,Open:wn,Investigating:wn,Expired:nu,Denied:bad};
+const badge=v=>`<span class="px-2 py-0.5 rounded-full text-xs font-medium ${BC[v]||nu}">${v}</span>`;
+const T=(h='Time')=>({k:'ts',h,f:fmt}),SV={k:'severity',l:'Severity',o:['Critical','High','Medium','Low']};
+const CH={},mk=(id,c)=>{CH[id]?.destroy();CH[id]=new Chart(document.getElementById(id),{...c,options:{responsive:true,maintainAspectRatio:false,...c.options}})};
+const tabs=(el,names,cur,cb)=>{el.innerHTML=names.map((n,i)=>`<button data-i="${i}" class="px-3 py-1.5 rounded-lg text-sm font-medium ${i===cur?'bg-[#0b1f44] text-white':'bg-white border border-slate-300 text-slate-600 hover:bg-slate-100'}">${n}</button>`).join('');el.onclick=e=>{const b=e.target.closest('button');if(b)cb(+b.dataset.i)}};
+const L={ts:'Time',acct:'Account',ip:'IP address',cat:'Category',minutes:'Duration (min)'};
+function modal(r,title){const rows=Object.entries(r).map(([k,v])=>`<div class="flex justify-between gap-4 py-1.5 border-b border-slate-100 text-sm"><span class="text-slate-500 capitalize">${L[k]||k}</span><span class="font-medium text-right">${k==='ts'?fmt(v):BC[v]?badge(v):v}</span></div>`).join('');
+ const a=A[r.acct];$('#mt').textContent=title||r.id||'Record details';
+ $('#mb').innerHTML=rows+(a?`<p class="mt-3 text-xs uppercase text-slate-400 font-semibold">Related account (read-only)</p><div class="text-sm mt-1">${a.holder} · ${a.type} · ${badge(a.status)}</div>`:'')+'<p class="mt-3 text-xs text-slate-400">Fictional record — view only.</p>';
+ $('#md').classList.replace('hidden','flex')}
+$('#mx').onclick=()=>$('#md').classList.replace('flex','hidden');$('#md').onclick=e=>{if(e.target.id==='md')$('#mx').click()};
+// ---------- sortable / filterable / paginated table ----------
+function Table(el,o){let q='',sk=null,sd=1,pg=0,cur=[];const ps=o.ps||8;
+ el.innerHTML=`<div class="flex flex-wrap gap-2 mb-3"><input class="q flex-1 min-w-[140px]" placeholder="Search records…">${(o.fl||[]).map(x=>`<select data-k="${x.k}" class="fl"><option value="">${x.l}: All</option>${x.o.map(v=>`<option>${v}</option>`).join('')}</select>`).join('')}<button class="rs btn2">Reset filters</button><button class="cv btn1">Export CSV</button></div><div class="overflow-x-auto"><table class="w-full text-sm"><thead></thead><tbody></tbody></table></div><div class="flex justify-between items-center mt-3 text-sm text-slate-500"><span class="ct"></span><div class="flex items-center gap-2"><button class="pv btn2">Prev</button><span class="pn"></span><button class="nx btn2">Next</button></div></div>`;
+ const g=x=>el.querySelector(x),sels=[...el.querySelectorAll('.fl')];
+ const rows=()=>{let r=o.rows().filter(x=>sels.every(e=>!e.value||x[e.dataset.k]===e.value)&&(!q||(fmt(x.ts||0)+' '+Object.values(x).join(' ')).toLowerCase().includes(q)));
+  if(sk)r=[...r].sort((a,b)=>(a[sk]>b[sk]?1:a[sk]<b[sk]?-1:0)*sd);return r};
+ function draw(){const r=rows(),pc=Math.max(1,Math.ceil(r.length/ps));pg=Math.min(pg,pc-1);cur=r.slice(pg*ps,pg*ps+ps);
+  g('thead').innerHTML='<tr>'+o.cols.map(c=>`<th data-k="${c.k}">${c.h}${sk===c.k?(sd>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  g('tbody').innerHTML=cur.map((x,i)=>`<tr data-i="${i}">`+o.cols.map(c=>`<td>${c.b?badge(x[c.k]):c.f?c.f(x[c.k]):x[c.k]}</td>`).join('')+'</tr>').join('')||`<tr><td colspan="${o.cols.length}" class="text-center text-slate-400 py-6">No matching records</td></tr>`;
+  g('.ct').textContent=r.length+' records';g('.pn').textContent=(pg+1)+' / '+pc;g('.pv').disabled=pg==0;g('.nx').disabled=pg>=pc-1}
+ g('.q').oninput=e=>{q=e.target.value.toLowerCase();pg=0;draw()};sels.forEach(e=>e.onchange=()=>{pg=0;draw()});
+ g('.rs').onclick=()=>{q='';g('.q').value='';sels.forEach(e=>e.value='');sk=null;pg=0;draw()};
+ g('.pv').onclick=()=>{pg--;draw()};g('.nx').onclick=()=>{pg++;draw()};
+ g('thead').onclick=e=>{const t=e.target.closest('th');if(!t)return;sd=sk===t.dataset.k?-sd:1;sk=t.dataset.k;draw()};
+ g('tbody').onclick=e=>{const t=e.target.closest('tr');if(t&&cur[t.dataset.i])modal(cur[t.dataset.i])};
+ g('.cv').onclick=()=>{const v=a=>'"'+String(a).replace(/"/g,'""')+'"',c=[o.cols.map(c=>v(c.h)).join(','),...rows().map(r=>o.cols.map(c=>v(c.f?c.f(r[c.k]):r[c.k])).join(','))].join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/csv'}));a.download=(o.name||'bankshield')+'.csv';a.click()};
+ draw();return{draw}}
+// ---------- dashboard ----------
+const cnt=(a,f)=>a.filter(f).length;
+const DT={
+ login:{t:'Login Attempt Monitoring',rows:()=>D.logins,cols:[{k:'id',h:'ID'},T(),{k:'acct',h:'Account'},{k:'ip',h:'IP'},{k:'device',h:'Device'},{k:'result',h:'Status',b:1},{k:'reason',h:'Detail'}],fl:[{k:'result',l:'Status',o:['Success','Failed']}]},
+ lock:{t:'Account Lockout Monitoring',rows:()=>D.lock,cols:[{k:'id',h:'ID'},T(),{k:'acct',h:'Account'},{k:'reason',h:'Reason'},{k:'attempts',h:'Failed tries'},{k:'severity',h:'Severity',b:1},{k:'status',h:'Status',b:1}],fl:[SV,{k:'status',l:'Status',o:['Locked','Released']}]},
+ sess:{t:'Active Session Monitoring',rows:()=>D.sess,cols:[{k:'id',h:'ID'},T('Started'),{k:'acct',h:'Account'},{k:'device',h:'Device'},{k:'ip',h:'IP'},{k:'status',h:'Status',b:1}],fl:[{k:'status',l:'Status',o:['Active','Expired','Terminated']}]},
+ alert:{t:'Security Alert Monitoring',rows:()=>D.alerts,cols:[{k:'id',h:'ID'},T(),{k:'title',h:'Alert'},{k:'acct',h:'Account'},{k:'severity',h:'Severity',b:1},{k:'status',h:'Status',b:1}],fl:[SV,{k:'status',l:'Status',o:['Open','Investigating','Resolved']}]}};
+const CARDS=[['login','Login Attempts',D.logins.length,`${cnt(D.logins,x=>x.result==='Success')} success · ${cnt(D.logins,x=>x.result==='Failed')} failed`],
+ ['lock','Account Lockouts',D.lock.length,`${cnt(D.lock,x=>x.status==='Locked')} still locked`],
+ ['sess','Sessions',D.sess.length,`${cnt(D.sess,x=>x.status==='Active')} active · ${cnt(D.sess,x=>x.status==='Expired')} expired · ${cnt(D.sess,x=>x.status==='Terminated')} terminated`],
+ ['alert','Security Alerts',D.alerts.length,`${cnt(D.alerts,x=>x.status!=='Resolved')} unresolved · ${cnt(D.alerts,x=>x.severity==='Critical')} critical`]];
+let dk='login',dT;
+function dash(){$('#cards').innerHTML=CARDS.map(([k,t,n,sub])=>`<button data-k="${k}" class="card text-left border-t-4 ${k===dk?'border-t-[#0b1f44] ring-2 ring-[#0b1f44]/20':'border-t-slate-200'} hover:shadow-md transition"><div class="text-xs uppercase text-slate-500 font-semibold">${t}</div><div class="text-3xl font-bold mt-1">${n}</div><div class="text-xs text-slate-500 mt-1">${sub}</div></button>`).join('');
+ const d=DT[dk];$('#dt').textContent=d.t;dT=Table($('#dtab'),{rows:d.rows,cols:d.cols,fl:d.fl,name:'dashboard-'+dk})}
+$('#cards').onclick=e=>{const b=e.target.closest('button');if(b){dk=b.dataset.k;dash()}};
+{const pv=D.alerts.filter(a=>a.severity==='Critical'||a.severity==='High').slice(0,5);
+$('#prev').innerHTML=pv.map((a,i)=>`<details class="border border-slate-200 rounded-lg p-2 text-sm"><summary class="cursor-pointer flex items-center justify-between gap-2"><span>${a.title}</span>${badge(a.severity)}</summary><div class="mt-2 text-slate-600">${a.detail}<div class="text-xs text-slate-400 mt-1">${a.id} · ${a.acct} · ${fmt(a.ts)}</div><button data-i="${i}" class="btn2 mt-2">View details</button></div></details>`).join('');
+$('#prev').onclick=e=>{const b=e.target.closest('button');if(b)modal(pv[b.dataset.i])}}
+function trend(){const lb=Array.from({length:14},(_,i)=>day(M0-(13-i)*DAY));
+ mk('c-trend',{type:'line',data:{labels:lb.map(x=>x.slice(5)),datasets:['Success','Failed'].map(r=>({label:r,data:lb.map(l=>cnt(D.logins,x=>x.result===r&&day(x.ts)===l)),borderColor:r==='Success'?'#10b981':'#dc2626',backgroundColor:r==='Success'?'#10b981':'#dc2626',tension:.3}))},options:{plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}})}
+// ---------- reports ----------
+const SC={Critical:'#dc2626',High:'#f97316',Medium:'#f59e0b',Low:'#94a3b8'},O=['Critical','High','Medium','Low','Success','Failed'],WD=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const bucket=(t,w)=>w?day(t-((new Date(t).getUTCDay()+6)%7)*DAY):day(t);
+const RP=[
+ {n:'Authentication Analysis',d:'Successful vs failed logins per day.',data:()=>D.logins,time:1,ser:r=>r.result,col:{Success:'#10b981',Failed:'#dc2626'},cols:[T(),{k:'acct',h:'Account'},{k:'ip',h:'IP'},{k:'result',h:'Result',b:1},{k:'reason',h:'Detail'}]},
+ {n:'Suspicious Activity Trends',d:'Security incidents (lockouts, alerts, suspicious activity) by severity — daily or weekly.',data:()=>D.events.filter(e=>e.cat==='Security Incident'),time:1,weekly:1,stack:1,ser:r=>r.severity,col:SC,cols:[T(),{k:'type',h:'Type'},{k:'acct',h:'Account'},{k:'severity',h:'Severity',b:1},{k:'detail',h:'Detail'}]},
+ {n:'Unauthorized Banking Access',d:'Denied attempts against restricted fictional banking resources.',data:()=>D.unauth,groups:{Resource:r=>r.resource,Role:r=>r.role,Severity:r=>r.severity},cols:[T(),{k:'acct',h:'Account'},{k:'resource',h:'Resource'},{k:'role',h:'Role'},{k:'severity',h:'Severity',b:1},{k:'outcome',h:'Outcome',b:1}]},
+ {n:'Account Lockout Analysis',d:'Lockout frequency and patterns.',data:()=>D.lock,groups:{Reason:r=>r.reason,Severity:r=>r.severity,Weekday:r=>WD[new Date(r.ts).getUTCDay()]},cols:[T(),{k:'acct',h:'Account'},{k:'reason',h:'Reason'},{k:'attempts',h:'Failed tries'},{k:'severity',h:'Severity',b:1},{k:'status',h:'Status',b:1}]}];
+const st={i:0,range:30,g:'',w:0,sel:null,cur:null};let rT;
+function repTab(i){st.i=i;st.sel=null;const d=RP[i];st.g=d.groups?Object.keys(d.groups)[0]:'';
+ $('#gb').innerHTML=d.groups?Object.keys(d.groups).map(k=>`<option>${k}</option>`).join(''):'';$('#gb').style.display=d.groups?'':'none';$('#wk').style.display=d.weekly?'':'none';
+ $('#rtt').textContent=d.n;$('#rd').textContent=d.d;tabs($('#rtabs'),RP.map(r=>r.n),i,repTab);
+ rT=Table($('#rt'),{rows:()=>st.cur.items.filter(r=>!st.sel||(st.cur.key(r)===st.sel.l&&(!st.sel.s||d.ser(r)===st.sel.s))),cols:d.cols,name:'report-'+d.n.toLowerCase().replace(/\W+/g,'-')});repDraw()}
+function repDraw(){const d=RP[st.i],cut=M0-(st.range-1)*DAY,items=d.data().filter(r=>r.ts>=cut),key=d.time?r=>bucket(r.ts,st.w):d.groups[st.g];let lb;
+ if(d.time)lb=[...new Set(Array.from({length:st.range},(_,i)=>bucket(M0-(st.range-1-i)*DAY,st.w)))];
+ else{const c={};items.forEach(r=>c[key(r)]=(c[key(r)]||0)+1);lb=Object.keys(c).sort((a,b)=>c[b]-c[a])}
+ const se=d.ser?[...new Set(items.map(d.ser))].sort((a,b)=>O.indexOf(a)-O.indexOf(b)):[d.n];st.cur={items,key};
+ const hz=!d.time&&['Resource','Reason'].includes(st.g);
+ mk('c-rep',{type:'bar',data:{labels:d.time?lb.map(x=>x.slice(5)):lb,datasets:se.map(x=>({label:x,data:lb.map(l=>items.filter(r=>key(r)===l&&(!d.ser||d.ser(r)===x)).length),backgroundColor:d.col?d.col[x]:'#0b1f44',borderRadius:4}))},
+  options:{indexAxis:hz?'y':'x',onClick:(e,el)=>{if(!el.length)return;st.sel={l:lb[el[0].index],s:d.ser?se[el[0].datasetIndex]:null};chip();rT.draw()},onHover:(e,el)=>e.native.target.style.cursor=el.length?'pointer':'default',
+  plugins:{legend:{display:!!d.ser,position:'bottom'}},scales:{x:{stacked:!!d.stack,beginAtZero:true,ticks:{precision:0}},y:{stacked:!!d.stack,beginAtZero:true,ticks:{precision:0}}}}});
+ chip();rT.draw()}
+function chip(){$('#chip').innerHTML=st.sel?`<span class="inline-flex items-center gap-2 text-sm bg-slate-100 rounded-full px-3 py-1">Showing: <b>${st.sel.l}${st.sel.s?' · '+st.sel.s:''}</b> <button id="cc" class="text-slate-500 hover:text-red-600">✕ clear</button></span>`:'';const c=$('#cc');if(c)c.onclick=()=>{st.sel=null;chip();rT.draw()}}
+$('#rg').onchange=e=>{st.range=+e.target.value;st.sel=null;repDraw()};$('#gb').onchange=e=>{st.g=e.target.value;st.sel=null;repDraw()};$('#wk').onchange=e=>{st.w=+e.target.value;st.sel=null;repDraw()};
+// ---------- activity log ----------
+const LG=['All Events','Authentication','Unauthorized Access','Account Modification','Security Incident'],LN2=['Authentication Logs','Unauthorized Access Logs','Account Modification Logs','Security Incident Logs'];let li=1;
+function logTab(i){li=i;const c=LG[i],rows=()=>D.events.filter(e=>!i||e.cat===c),types=[...new Set(rows().map(e=>e.type))].sort();
+ tabs($('#ltabs'),LG.map((x,j)=>j?LN2[j-1]:x),i,logTab);
+ Table($('#lt'),{rows,ps:10,name:'log-'+c.toLowerCase().replace(/\W+/g,'-'),cols:[{k:'id',h:'Event'},T(),...(i?[]:[{k:'cat',h:'Category'}]),{k:'type',h:'Type'},{k:'acct',h:'Account'},{k:'ip',h:'IP'},{k:'severity',h:'Severity',b:1},{k:'detail',h:'Detail'}],fl:[{k:'type',l:'Type',o:types},SV]})}
+// ---------- navigation ----------
+const TT={dash:'Dashboard',rep:'Reports & Analytics',log:'Activity Log'},sb=$('#sb');
+function go(m){['dash','rep','log'].forEach(x=>$('#m-'+x).classList.toggle('hidden',x!==m));$('#ttl').textContent=TT[m];
+ document.querySelectorAll('#nav button').forEach(b=>b.className='w-full text-left px-3 py-2.5 rounded-lg transition '+(b.dataset.m===m?'bg-white/15 font-semibold':'hover:bg-white/10'));
+ closeSb();if(m==='dash'){dash();trend()}if(m==='rep')repTab(st.i);if(m==='log')logTab(li);window.scrollTo(0,0)}
+const closeSb=()=>{sb.classList.add('-translate-x-full');$('#ov').classList.add('hidden')};
+$('#hb').onclick=()=>{sb.classList.remove('-translate-x-full');$('#ov').classList.remove('hidden')};$('#ov').onclick=closeSb;
+$('#nav').onclick=e=>{const b=e.target.closest('button');if(b)go(b.dataset.m)};
+go('dash');
+</script></body></html>
